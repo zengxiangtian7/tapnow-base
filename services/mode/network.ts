@@ -1,6 +1,22 @@
 
 import type { ModelConfig } from "./types";
 
+// 检测是否在开发环境中
+const isDev = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+// 使用 CORS 代理包装 URL（仅开发环境）
+const wrapWithCorsProxy = (targetUrl: string): string => {
+    if (!isDev) return targetUrl;
+    // 如果已经是相对路径或者是本地地址，不需要代理
+    if (targetUrl.startsWith('/') || 
+        targetUrl.includes('localhost') || 
+        targetUrl.includes('127.0.0.1')) {
+        return targetUrl;
+    }
+    return `/cors-proxy?url=${encodeURIComponent(targetUrl)}`;
+};
+
 export const constructUrl = (baseUrl: string, endpointPath: string) => {
     let base = baseUrl ? baseUrl.replace(/\/$/, '') : '';
     let path = endpointPath.replace(/^\//, '');
@@ -15,6 +31,22 @@ export const constructUrl = (baseUrl: string, endpointPath: string) => {
 export const fetchThirdParty = async (url: string, method: string, body: any, config: ModelConfig, options: { timeout?: number, retries?: number, isFormData?: boolean } = {}) => {
   const { timeout = 60000, retries = 0, isFormData = false } = options;
   
+  // 保存原始 URL 用于日志
+  const originalUrl = url;
+  
+  // 自动升级协议：HTTPS 页面下强制将 HTTP 请求升级为 HTTPS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('http://')) {
+      console.warn('[Network] Mixed Content Security: Auto-upgrading HTTP URL to HTTPS');
+      url = url.replace(/^http:\/\//i, 'https://');
+  }
+  
+  // 开发环境下使用 CORS 代理
+  url = wrapWithCorsProxy(url);
+  
+  if (isDev && url !== originalUrl) {
+      console.log('[Network] Using CORS proxy for:', originalUrl);
+  }
+
   console.log('[Network] Fetching URL:', url);
   console.log('[Network] Method:', method);
   console.log('[Network] Has body:', !!body);
@@ -129,6 +161,18 @@ export const fetchThirdParty = async (url: string, method: string, body: any, co
           clearTimeout(timeoutId);
           lastError = error;
           if (error.name === 'AbortError') lastError = new Error(`Request timed out after ${timeout/1000}s`);
+          
+          // 增强错误提示：Mixed Content / CORS
+          if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+               const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+               const isTargetHttp = url.startsWith('http://');
+               if (isHttps && isTargetHttp) {
+                   lastError = new Error(`浏览器安全限制：无法在 HTTPS 网站中请求 HTTP 接口 (${url})。请使用 HTTPS API 地址。`);
+               } else {
+                   lastError = new Error(`网络请求失败 (CORS 或网络问题)。请检查 API 地址是否允许跨域访问，或尝试使用 HTTPS。`);
+               }
+          }
+
           if (attempt === retries || error.isNonRetryable) throw lastError;
           await new Promise(res => setTimeout(res, 1000 * (attempt + 1)));
       }

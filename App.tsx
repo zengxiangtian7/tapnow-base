@@ -1235,26 +1235,36 @@ const CanvasWithSidebar: React.FC = () => {
                     // 连接线颜色
                     const lineColor = isSelected ? "#3b82f6" : (isDark ? "#6b7280" : "#9ca3af");
                     
+                    // 计算贝塞尔曲线上 t=0.5 的实际中点位置
+                    const t = 0.5;
+                    const p0x = relSx, p0y = relSy;
+                    const p1x = relSx + cp, p1y = relSy;
+                    const p2x = relTx - cp, p2y = relTy;
+                    const p3x = relTx, p3y = relTy;
+                    const midX = Math.pow(1-t,3)*p0x + 3*Math.pow(1-t,2)*t*p1x + 3*(1-t)*Math.pow(t,2)*p2x + Math.pow(t,3)*p3x;
+                    const midY = Math.pow(1-t,3)*p0y + 3*Math.pow(1-t,2)*t*p1y + 3*(1-t)*Math.pow(t,2)*p2y + Math.pow(t,3)*p3y;
+                    
                     return (
                         <svg 
                             key={conn.id}
-                            className="absolute pointer-events-none"
+                            className="absolute"
                             style={{ 
                                 left: minX, 
                                 top: minY, 
                                 width: svgWidth, 
                                 height: svgHeight,
                                 zIndex: isSelected ? 20 : 5,
-                                overflow: 'visible'
+                                overflow: 'visible',
+                                pointerEvents: 'none'
                             }}
                         >
                             {/* 点击区域 */}
                             <path 
                                 d={d} 
                                 stroke="transparent" 
-                                strokeWidth={12} 
+                                strokeWidth={16} 
                                 fill="none" 
-                                className="pointer-events-auto cursor-pointer"
+                                style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                                 onClick={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); }}
                             />
                             {/* 主连接线 - 实线 */}
@@ -1264,6 +1274,7 @@ const CanvasWithSidebar: React.FC = () => {
                                 strokeWidth={isSelected ? 3 : 2} 
                                 fill="none" 
                                 strokeLinecap="round"
+                                style={{ pointerEvents: 'none' }}
                             />
                             {/* 选中时的发光效果 */}
                             {isSelected && (
@@ -1274,25 +1285,44 @@ const CanvasWithSidebar: React.FC = () => {
                                     fill="none" 
                                     strokeLinecap="round"
                                     opacity={0.3}
+                                    style={{ pointerEvents: 'none' }}
                                 />
                             )}
-                            {/* 删除按钮 */}
+                            {/* 删除按钮 - 使用纯 SVG 实现 */}
                             {isSelected && (
-                                <foreignObject 
-                                    x={(relSx + relTx) / 2 - 10} 
-                                    y={(relSy + relTy) / 2 - 10} 
-                                    width={20} 
-                                    height={20}
-                                    className="pointer-events-auto"
+                                <g 
+                                    style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                                    onClick={(e) => { e.stopPropagation(); removeConnection(conn.id); }}
+                                    onMouseDown={(e) => e.stopPropagation()}
                                 >
-                                    <button 
-                                        className={`w-5 h-5 flex items-center justify-center rounded-full transition-all shadow-md ${isDark ? 'bg-zinc-800 border border-zinc-600 text-zinc-300 hover:text-red-400 hover:border-red-500' : 'bg-white border border-gray-300 text-gray-500 hover:text-red-600 hover:border-red-500'}`}
-                                        onClick={(e) => { e.stopPropagation(); removeConnection(conn.id); }} 
-                                        title="删除连接"
-                                    >
-                                        <Icons.X size={10}/>
-                                    </button>
-                                </foreignObject>
+                                    {/* 按钮背景 */}
+                                    <circle 
+                                        cx={midX} 
+                                        cy={midY} 
+                                        r={10}
+                                        fill={isDark ? "#27272a" : "#ffffff"}
+                                        stroke={isDark ? "#52525b" : "#d1d5db"}
+                                        strokeWidth={1}
+                                        className="hover:stroke-red-500"
+                                    />
+                                    {/* X 图标 */}
+                                    <line 
+                                        x1={midX - 4} y1={midY - 4} 
+                                        x2={midX + 4} y2={midY + 4} 
+                                        stroke={isDark ? "#a1a1aa" : "#6b7280"}
+                                        strokeWidth={2}
+                                        strokeLinecap="round"
+                                        className="hover:stroke-red-500"
+                                    />
+                                    <line 
+                                        x1={midX + 4} y1={midY - 4} 
+                                        x2={midX - 4} y2={midY + 4} 
+                                        stroke={isDark ? "#a1a1aa" : "#6b7280"}
+                                        strokeWidth={2}
+                                        strokeLinecap="round"
+                                        className="hover:stroke-red-500"
+                                    />
+                                </g>
                             )}
                         </svg>
                     );

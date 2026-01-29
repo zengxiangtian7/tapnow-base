@@ -146,6 +146,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
             if (e.name === 'AbortError') {
                 console.warn(`测试 ${modelKey} 超时`);
             }
+            
+            // 检查是否是 Mixed Content 导致的失败 (虽然 catch 无法直接区分，但可以推测)
+            const config = configs[modelKey];
+            const originalBaseUrl = (config?.baseUrl || globalBaseUrl || '');
+            
+            if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
+                // 如果我们刚才进行了自动升级（原地址是 HTTP，但在 HTTPS 页面下测试）
+                if (typeof window !== 'undefined' && window.location.protocol === 'https:' && originalBaseUrl.startsWith('http://')) {
+                      console.warn('HTTPS upgrade failed for HTTP endpoint');
+                      alert(`连接失败：\n1. 当前网站是 HTTPS 安全协议，浏览器禁止直接访问 HTTP 接口。\n2. 系统尝试自动升级为 HTTPS 连接，但对方服务器不支持 HTTPS 或握手失败。\n\n解决方案：\n👉 请更换支持 HTTPS 的 API 服务商（推荐）\n👉 或下载代码在本地 (localhost) 运行`);
+                } else if (isMixedContent(originalBaseUrl)) {
+                     console.warn('Mixed Content detected during connection test');
+                     alert('连接失败：浏览器禁止在 HTTPS 网站中访问 HTTP 接口。请使用 HTTPS API 地址。');
+                } else {
+                     // 可能是 CORS
+                     console.warn('CORS or Network error');
+                     // 不弹窗，只显示红色错误图标
+                }
+            }
+
             // CORS 错误或网络错误
             setTestResults(prev => ({ ...prev, [modelKey]: 'error' }));
         } finally {
@@ -272,6 +292,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     const isConfigured = (key: string) => {
         const config = configs[key];
         return (config?.key || globalApiKey) && (config?.baseUrl || globalBaseUrl);
+    };
+
+    // 检查是否是混合内容（Mixed Content）风险
+    const isMixedContent = (url: string) => {
+        if (typeof window === 'undefined') return false;
+        return window.location.protocol === 'https:' && url.toLowerCase().startsWith('http://');
     };
 
     // 样式
